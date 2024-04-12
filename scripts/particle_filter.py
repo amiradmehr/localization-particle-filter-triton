@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
+from sensor_msgs.msg import LaserScan
 
 import numpy as np
 import math
@@ -11,7 +12,7 @@ from motion_model import MotionModel
 
 
 class ParticleFilter:
-    def __init__(self, num_particles: int, z_hit: float, z_max: float = 9.2, z_random: float = 0, sigma_hit: float = 1):
+    def __init__(self, z_hit: float, num_particles: int = 250, z_max: float = 9.2, z_random: float = 0, sigma_hit: float = 1):
         self.num_particles = num_particles
         self.z_hit = z_hit
         self.z_max = z_max
@@ -21,7 +22,7 @@ class ParticleFilter:
         self.particles = np.zeros((self.num_particles, 3))
         self.weights = np.ones(self.num_particles) / self.num_particles
 
-        self.sensor_model = SensorModel(z_hit, z_max, z_random, sigma_hit)
+        self.sensor_model = SensorModel(z_hit= z_hit, z_max=z_max, z_random=z_random, sigma_hit=sigma_hit)
         self.motion_model = MotionModel()
 
     def initialize_particles(self, initial_pose: np.ndarray, initial_cov: np.ndarray):
@@ -62,5 +63,27 @@ class ParticleFilter:
         :return: particle with the highest weight. size 1x3
         """
         max_weight = np.argmax(self.weights)
+
+
+class Robot:
+    def __init__(self, x: float, y: float, theta: float):
+
+        rospy.init_node('Triton', anonymous=True)
+
+        self.ranges = None
+        self.lidar_topic = '/scan'
+        self.lidar_sub = rospy.Subscriber(self.lidar_topic, LaserScan, self.lidar_callback)
+        
+
+    def move(self, v: float, w: float, delta_t: float):
+        """
+        Move the robot using the control inputs
+        :param v: linear velocity
+        :param w: angular velocity
+        :param delta_t: time step
+        """
+        self.x += v * math.cos(self.theta) * delta_t
+        self.y += v * math.sin(self.theta) * delta_t
+        self.theta += w * delta_t
 
 
