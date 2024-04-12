@@ -1,0 +1,45 @@
+
+# import numpy as np
+# import cv2
+
+# def create_likelihood_field(map_image, sigma):
+#     # Load the map image
+#     map_img = cv2.imread(map_image, cv2.IMREAD_GRAYSCALE)
+    
+#     # print number of distinct values in the map image
+#     print(np.unique(map_img))
+
+#     # save to text file
+#     np.savetxt("map.txt", map_img, fmt='%f')
+#     # Invert the map image
+#     map_img = cv2.bitwise_not(map_img)
+
+
+
+#     # Convert to float32
+#     map_img = map_img.astype(np.float32)
+
+#     # Apply Gaussian blur
+#     likelihood_field = cv2.GaussianBlur(map_img, (0, 0), sigma)
+
+#     # Normalize the likelihood field
+#     likelihood_field /= np.max(likelihood_field)
+
+#     # Convert to uint8
+#     likelihood_field = (likelihood_field * 255).astype(np.uint8)
+
+#     return likelihood_field
+
+# if __name__ == "__main__":
+#     # Path to the map image file
+#     # path is in the previous directory in doc folder
+#     map_image_path = "../docs/img/map.pgm"
+    
+#     # Standard deviation for Gaussian blur
+#     sigma = 0.3
+
+#     # Create likelihood field image
+#     likelihood_field = create_likelihood_field(map_image_path, sigma)
+
+#     # Save likelihood field image
+#     cv2.imwrite("likelihood_field.png", likelihood_field)
