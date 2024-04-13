@@ -26,6 +26,7 @@
     <node pkg="tf" type="static_transform_publisher" name="world_to_odom" args="0 0 0 0 0 0 /world /odom 100" />
     <node pkg="tf" type="static_transform_publisher" name="map_to_world" args="0.0 0.0 0.0 0 0 0.0 /map /world 100" />
     <node pkg="cs603_particle_filter" type="position_publisher.py" name="position_publisher" />
+    <node pkg="map_server" type="map_server" name="map_server" args="$(find cs603_particle_filter)/scripts/imgs/map.yaml" />
 
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find cs603_particle_filter)/rviz/lidar.rviz" />
     
