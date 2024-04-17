@@ -15,38 +15,34 @@ from sensor_model import SensorModel
 from motion_model import MotionModel
 
 
-class Particles:
-    def __init__(self, num_particles: int, theta: float = 0.0):
+
+class ParticleFilter:
+    def __init__(self, motion_model: MotionModel, sensor_model: SensorModel,
+                 num_particles: int = 250):
+        self.motion_model = motion_model
+        self.sensor_model = sensor_model
         self.num_particles = num_particles
-        self.particles = []
-        self.theta = theta
 
-        rospy.init_node('particles', anonymous=True)
-
-        # Publisher for PoseArray messages
         self.particle_pub = rospy.Publisher("particles", PoseArray, queue_size=10)
-        self.particles_poses = np.zeros((self.num_particles, 3))
 
         self.rate = rospy.Rate(1)  # Publishing rate
 
-    def generate_random_particles(self):
+    def initialize_particles(self):
         """
-        Generate random particles for demonstration purposes
+        Initialize the particles
         """
-        particles_msg = PoseArray()
-        particles_msg.header.stamp = rospy.Time.now()
-        particles_msg.header.frame_id = "map"  # Set the frame ID to match your map frame
+        particles = PoseArray()
+        particles.header.stamp = rospy.Time.now()
+        particles.header.frame_id = "map"
 
         for _ in range(self.num_particles):
             particle = Pose()
-            particle.position.x = random.uniform(-7, 7)  # Set the range of x coordinates
-            particle.position.y = random.uniform(-5, 5)  # Set the range of y coordinates
+            particle.position.x = random.uniform(-7, 7)
+            particle.position.y = random.uniform(-5, 5)
             particle.position.z = 0
 
             theta = random.uniform(-math.pi, math.pi)
-
             euler_angles = [0, 0, theta]
-            # Generate a random quaternion
             quaternion = quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
 
             particle.orientation.x = quaternion[0]
@@ -54,56 +50,9 @@ class Particles:
             particle.orientation.z = quaternion[2]
             particle.orientation.w = quaternion[3]
 
-            particles_msg.poses.append(particle)
+            particles.poses.append(particle)
 
-        # store particles poses x,y,theta in numpy array: self.particles_poses
-        for i, particle in enumerate(particles_msg.poses):
-            self.particles_poses[i, 0] = particle.position.x
-            self.particles_poses[i, 1] = particle.position.y
-            self.particles_poses[i, 2] = math.atan2(2 * (particle.orientation.w * particle.orientation.z + particle.orientation.x * particle.orientation.y), 1 - 2 * (particle.orientation.y**2 + particle.orientation.z**2))
-
-        print(self.particles_poses)
-
-
-        # Publish the PoseArray message
-        self.particle_pub.publish(particles_msg)
-
-
-    def publish_particles(self, particles_msg: PoseArray):
-        """
-        Publish the particles as a PoseArray message
-        """
-        particles_msg = PoseArray()
-        particles_msg.header.stamp = rospy.Time.now()
-        particles_msg.header.frame_id = "map"  # Set the frame ID to match your map frame
-
-        for particle in self.particles:
-            particles_msg.poses.append(particle)
-
-        # Publish the PoseArray message
-        self.particle_pub.publish(particles_msg)
-    
-    def run(self):
-        """
-        Main loop to continuously publish particles
-        """
-        while not rospy.is_shutdown():
-            self.generate_random_particles()
-            self.rate.sleep()
-
-
-
-
-
-class ParticleFilter:
-    def __init__(self, motion_model: MotionModel, sensor_model: SensorModel, particles: Particles,
-                 num_particles: int = 250,):
-        self.motion_model = motion_model
-        self.sensor_model = sensor_model
-        self.num_particles = num_particles
-        self.particles = particles
-
-        self.particles = PoseArray()
+        return particles
 
     def particle_filter(self, X_t_minus_1:list , u_t: np.ndarray, z_t: np.ndarray) -> list:
         """
@@ -128,12 +77,28 @@ class ParticleFilter:
         weights = np.array(weights) / np.sum(weights)  # Normalize weights
 
         # Step 3: Resampling
-        for _ in range(self.M):
+        for _ in range(self.num_particles):
             i = np.random.choice(range(self.num_particles), p=weights)
             X_t.append(X_bar_t[i][0])
 
         return X_t
     
+    def convert_posearray_to_list(self, pose_array: PoseArray) -> np.ndarray:
+        """
+        Convert PoseArray message to a numpy array
+        :param pose_array: PoseArray message
+        :return: list
+        """
+        pose_list = []
+
+        for pose in pose_array.poses:
+            p = np.array([pose.position.x, pose.position.y, euler_from_quaternion([pose.orientation.x,
+                                                                                 pose.orientation.y,
+                                                                                 pose.orientation.z,
+                                                                                 pose.orientation.w])[2]])
+            pose_list.append(p)
+
+        return pose_list
 
     def convert_particles_to_poses(self, X_t: list) -> PoseArray:
         """
@@ -168,13 +133,6 @@ class ParticleFilter:
         """
         Publish the particles as a PoseArray message
         """
-        particles_msg = PoseArray()
-        particles_msg.header.stamp = rospy.Time.now()
-        particles_msg.header.frame_id = "map"  # Set the frame ID to match your map frame
-
-        for particle in self.particles:
-            particles_msg.poses.append(particle)
-
         # Publish the PoseArray message
         self.particle_pub.publish(particles_msg)
     
@@ -215,21 +173,39 @@ class Robot:
 
 def main():
     robot = Robot()
+    motion_model = MotionModel()
+    sensor_model = SensorModel()
+    pf = ParticleFilter(motion_model, sensor_model, num_particles=250)
+    initial_particles = pf.initialize_particles()
+    odometry_data_t_minus_1 = np.array([robot.x, robot.y, robot.theta])
 
 
-    while not rospy.is_shutdown(): 
-        # read robot's lidar data
-        ranges = robot.ranges
-        # read robot's odometry data
-        x = robot.x
-        y = robot.y
-        theta = robot.theta
+    converted_particles = pf.convert_posearray_to_list(initial_particles)
+    # for particle in converted_particles:
+    #     print(particle)
+
+    # print(converted_particles)
+    while not rospy.is_shutdown():
+        pf.publish_particles(initial_particles)
+        odometry_data_t = np.array([robot.x, robot.y, robot.theta])
+        u = np.array([odometry_data_t_minus_1, odometry_data_t])
+        range_data = robot.ranges
+        # only select every values with 45 spacing
+        if range_data is not None:
+            range_data = range_data[::22]
+            # print(range_data.shape)
+            
+            odometry_data = np.array([robot.x, robot.y, robot.theta])
+            new_particles_array = pf.particle_filter(converted_particles, u, range_data)
+            new_particles = pf.convert_particles_to_poses(new_particles_array)
+            pf.publish_particles(new_particles)
+            converted_particles = new_particles_array
+
+            odometry_data_t_minus_1 = odometry_data_t
+
+        rospy.sleep(2)
 
 
-        print(f"x: {x}, y: {y}, theta: {theta}")
-        print(f"ranges: {ranges}")
-
-        rospy.sleep(1)
 
 
 def test_arrow():
